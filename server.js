@@ -5,7 +5,13 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: {
+    origin: "*", // or replace with your Vercel domain e.g. "https://your-app.vercel.app"
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 const rooms = {};
@@ -41,7 +47,7 @@ io.on('connection', (socket) => {
     // Send current players to the new player
     socket.emit('currentState', room.players);
 
-    // Notify everyone in the room about the new player
+    // Notify everyone (including host) that someone joined
     io.to(roomId).emit('playerJoined', {
       id: socket.id,
       player: room.players[socket.id]
@@ -80,7 +86,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leaveRoom', (roomId) => {
-    if (rooms[roomId]) {
+    if (rooms[roomId] && rooms[roomId].players[socket.id]) {
       delete rooms[roomId].players[socket.id];
       io.to(roomId).emit('playerLeft', socket.id);
       if (Object.keys(rooms[roomId].players).length === 0) {
@@ -104,6 +110,7 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(3000, () => {
-  console.log('Server running on port 3000');
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
