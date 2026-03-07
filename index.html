@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Stick Fight - UFC Octagon (Online)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
   body {
@@ -13,6 +13,7 @@
     overflow: hidden;
     color: #eee;
     font-family: Arial, sans-serif;
+    touch-action: none;
   }
 
   #menu, #lobby {
@@ -25,6 +26,8 @@
     align-items: center;
     z-index: 30;
     text-align: center;
+    padding: 30px;
+    box-sizing: border-box;
   }
   #lobby { display: none; }
 
@@ -155,6 +158,80 @@
   #back-btn:hover {
     background: rgba(244,67,54,0.5);
   }
+
+  /* ── Mobile Touch Controls ──────────────────────────────────────────────── */
+  #touch-controls {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 25;
+    display: none;
+    user-select: none;
+  }
+
+  @media (max-width: 900px), (max-height: 700px) {
+    #touch-controls { display: block; }
+  }
+
+  .joystick {
+    position: absolute;
+    bottom: 100px;
+    left: 40px;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 3px solid rgba(255,255,255,0.25);
+    pointer-events: auto;
+  }
+
+  .stick {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .action-buttons {
+    position: absolute;
+    bottom: 40px;
+    right: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    pointer-events: auto;
+  }
+
+  .btn {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 3px solid rgba(255,255,255,0.4);
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 20px #0008;
+    backdrop-filter: blur(4px);
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn:active {
+    transform: scale(0.9);
+    background: rgba(255,255,255,0.3);
+  }
+
+  #jump-btn  { background: rgba(100,220,100,0.25); }
+  #punch-btn { background: rgba(220,100,100,0.25); }
+  #kick-btn  { background: rgba(220,180,60,0.25); }
+  #block-btn { background: rgba(100,100,220,0.25); }
 </style>
 </head>
 <body>
@@ -203,10 +280,23 @@
   </div>
 
   <div id="message">FIGHT!</div>
+
+  <!-- Mobile Touch Controls -->
+  <div id="touch-controls">
+    <div id="joystick" class="joystick">
+      <div id="stick" class="stick"></div>
+    </div>
+    <div class="action-buttons">
+      <div id="jump-btn"  class="btn">JUMP</div>
+      <div id="punch-btn" class="btn">PUNCH</div>
+      <div id="kick-btn"  class="btn">KICK</div>
+      <div id="block-btn" class="btn">BLOCK</div>
+    </div>
+  </div>
 </div>
 
 <script>
-const socket = io('http://localhost:3000'); // ← CHANGE THIS to your deployed server URL
+const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR SERVER URL WHEN DEPLOYED
 
 let myId = null;
 let opponentId = null;
@@ -217,6 +307,19 @@ const lobbyEl  = document.getElementById('lobby');
 const gameEl   = document.getElementById('game');
 const msgEl    = document.getElementById('message');
 const roomCodeEl = document.getElementById('roomCode');
+
+// Touch state
+let joystickActive = false;
+let joystickCenterX = 0;
+let joystickCenterY = 0;
+let joystickTouchId = null;
+let joystickDir = { x: 0, y: 0 };
+
+let touchJump  = false;
+let touchPunch = false;
+let touchKick  = false;
+let touchBlock = false;
+let touchCrouch = false;
 
 const p1 = {
   el: document.getElementById('p1'),
@@ -242,9 +345,106 @@ let keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup',   e => keys[e.code] = false);
 
+// ── Touch Joystick ────────────────────────────────────────────────────────
+const joystick = document.getElementById('joystick');
+const stick = document.getElementById('stick');
+
+joystick.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (joystickTouchId === null && e.changedTouches.length > 0) {
+    joystickTouchId = e.changedTouches[0].identifier;
+    updateJoystick(e.changedTouches[0]);
+  }
+}, { passive: false });
+
+joystick.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (let touch of e.changedTouches) {
+    if (touch.identifier === joystickTouchId) {
+      updateJoystick(touch);
+      break;
+    }
+  }
+}, { passive: false });
+
+joystick.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (let touch of e.changedTouches) {
+    if (touch.identifier === joystickTouchId) {
+      resetJoystick();
+      joystickTouchId = null;
+      break;
+    }
+  }
+}, { passive: false });
+
+function updateJoystick(touch) {
+  if (!joystickActive) {
+    const rect = joystick.getBoundingClientRect();
+    joystickCenterX = rect.left + rect.width / 2;
+    joystickCenterY = rect.top + rect.height / 2;
+    joystickActive = true;
+  }
+
+  let dx = touch.clientX - joystickCenterX;
+  let dy = touch.clientY - joystickCenterY;
+  const dist = Math.hypot(dx, dy);
+  const maxDist = 80;
+
+  if (dist > maxDist) {
+    dx = dx * maxDist / dist;
+    dy = dy * maxDist / dist;
+  }
+
+  stick.style.left = `${dx + 80}px`;
+  stick.style.top  = `${dy + 80}px`;
+
+  joystickDir.x = dx / maxDist;
+  joystickDir.y = dy / maxDist;
+
+  // Crouch if dragging down strongly
+  touchCrouch = joystickDir.y > 0.6;
+}
+
+function resetJoystick() {
+  joystickActive = false;
+  joystickDir = { x: 0, y: 0 };
+  stick.style.left = '50%';
+  stick.style.top  = '50%';
+  touchCrouch = false;
+}
+
+// ── Action Buttons ────────────────────────────────────────────────────────
+document.getElementById('jump-btn').addEventListener('touchstart', e => { e.preventDefault(); touchJump = true; });
+document.getElementById('jump-btn').addEventListener('touchend',   e => { e.preventDefault(); touchJump = false; });
+
+document.getElementById('punch-btn').addEventListener('touchstart', e => { e.preventDefault(); touchPunch = true; });
+document.getElementById('punch-btn').addEventListener('touchend',   e => { e.preventDefault(); touchPunch = false; });
+
+document.getElementById('kick-btn').addEventListener('touchstart', e => { e.preventDefault(); touchKick = true; });
+document.getElementById('kick-btn').addEventListener('touchend',   e => { e.preventDefault(); touchKick = false; });
+
+document.getElementById('block-btn').addEventListener('touchstart', e => { e.preventDefault(); touchBlock = true; });
+document.getElementById('block-btn').addEventListener('touchend',   e => { e.preventDefault(); touchBlock = false; });
+
+// ── Get Controls (keyboard + touch) ───────────────────────────────────────
+function getControls() {
+  return {
+    left:   keys.KeyA || keys.ArrowLeft   || joystickDir.x < -0.3,
+    right:  keys.KeyD || keys.ArrowRight  || joystickDir.x > 0.3,
+    jump:   keys.KeyW || keys.ArrowUp     || touchJump,
+    down:   keys.KeyS || keys.ArrowDown   || touchCrouch,
+    punch:  keys.Space                    || touchPunch,
+    kick:   (keys.ShiftLeft || keys.ShiftRight) || touchKick,
+    block:  keys.KeyF                     || touchBlock,
+    facing: (keys.KeyD || keys.ArrowRight) ? 1 : ((keys.KeyA || keys.ArrowLeft) ? -1 : undefined)
+  };
+}
+
+// ── Rest of your game logic (unchanged except controls input) ─────────────
 function joinRoom() {
   const name = document.getElementById('name-input').value.trim() || "Player";
-  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2, 9);
+  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2,9);
 
   menuEl.style.display = 'none';
   lobbyEl.style.display = 'flex';
@@ -254,9 +454,7 @@ function joinRoom() {
 }
 
 function goBackToMenu() {
-  if (roomId) {
-    socket.emit('leaveRoom', roomId);
-  }
+  if (roomId) socket.emit('leaveRoom', roomId);
 
   menuEl.style.display = 'flex';
   lobbyEl.style.display = 'none';
@@ -273,17 +471,6 @@ function goBackToMenu() {
   p2.staminaBar.style.width = '100%';
 }
 
-function startGameScreen() {
-  // Small delay so both clients are ready
-  setTimeout(() => {
-    lobbyEl.style.display = 'none';
-    gameEl.style.display = 'block';
-    msgEl.textContent = "FIGHT!";
-    msgEl.style.opacity = '1';
-    setTimeout(() => msgEl.style.opacity = '0', 2200);
-  }, 200);
-}
-
 socket.on('currentState', (players) => {
   Object.entries(players).forEach(([id, data]) => {
     if (id === socket.id) {
@@ -294,7 +481,6 @@ socket.on('currentState', (players) => {
       p1.stamina = data.stamina ?? 100;
       p1.hpBar.style.width = p1.hp + '%';
       p1.staminaBar.style.width = p1.stamina + '%';
-      updatePosition(p1);
     } else {
       opponentId = id;
       p2.x = data.x;
@@ -303,11 +489,9 @@ socket.on('currentState', (players) => {
       p2.stamina = data.stamina ?? 100;
       p2.hpBar.style.width = p2.hp + '%';
       p2.staminaBar.style.width = p2.stamina + '%';
-      updatePosition(p2);
     }
   });
 
-  // If we joined a room that already has 2 players → start immediately
   if (Object.keys(players).length === 2) {
     startGameScreen();
   }
@@ -323,23 +507,26 @@ socket.on('playerJoined', ({id, player}) => {
   p2.stamina = player.stamina ?? 100;
   p2.hpBar.style.width = p2.hp + '%';
   p2.staminaBar.style.width = p2.stamina + '%';
-  updatePosition(p2);
 
-  // Second player joined → start game for both
   startGameScreen();
 });
 
+function startGameScreen() {
+  lobbyEl.style.display = 'none';
+  gameEl.style.display = 'block';
+  msgEl.textContent = "FIGHT!";
+  msgEl.style.opacity = '1';
+  setTimeout(() => msgEl.style.opacity = '0', 2200);
+}
+
 socket.on('playerUpdate', (data) => {
   if (data.id === socket.id) return;
-
   p2.x = data.x;
   p2.facing = data.facing;
-  updatePosition(p2);
 });
 
 socket.on('applyDamage', (data) => {
   let targetHpBar, targetHp;
-
   if (data.targetId === socket.id) {
     targetHpBar = p1.hpBar;
     targetHp = p1.hp = Math.max(0, p1.hp - data.damage);
@@ -347,10 +534,7 @@ socket.on('applyDamage', (data) => {
     targetHpBar = p2.hpBar;
     targetHp = p2.hp = Math.max(0, p2.hp - data.damage);
   }
-
-  if (targetHpBar) {
-    targetHpBar.style.width = targetHp + '%';
-  }
+  if (targetHpBar) targetHpBar.style.width = targetHp + '%';
 });
 
 socket.on('playerLeft', (id) => {
@@ -365,39 +549,26 @@ socket.on('roomFull', () => {
   goBackToMenu();
 });
 
-function updatePosition(p) {
-  p.el.style.left = p.x + 'px';
-  p.el.style.transform = `scaleX(${p.facing})`;
-}
-
 function loop() {
   if (gameEl.style.display !== 'block') {
     requestAnimationFrame(loop);
     return;
   }
 
-  const input = {
-    left: keys.KeyA || keys.ArrowLeft,
-    right: keys.KeyD || keys.ArrowRight,
-    crouched: keys.KeyS || keys.ArrowDown,
-    punch: keys.Space,
-    kick: keys.ShiftLeft || keys.ShiftRight,
-    block: keys.KeyF,
-    facing: (keys.KeyD || keys.ArrowRight) ? 1 : ((keys.KeyA || keys.ArrowLeft) ? -1 : undefined)
-  };
+  const ctrl = getControls();
 
-  if (input.left || input.right || input.crouched || input.punch || input.kick || input.block || input.facing) {
-    socket.emit('playerInput', input);
+  if (ctrl.left || ctrl.right || ctrl.crouched || ctrl.punch || ctrl.kick || ctrl.block || ctrl.facing) {
+    socket.emit('playerInput', ctrl);
   }
 
-  if (input.punch || input.kick) {
+  if (ctrl.punch || ctrl.kick) {
     const dist = Math.abs(p1.x - p2.x);
     if (dist < 140) {
-      const damage = input.punch ? 12 : 18;
+      const damage = ctrl.punch ? 12 : 18;
       socket.emit('attackHit', {
         targetId: opponentId,
         damage,
-        attackType: input.punch ? 'punch' : 'kick'
+        attackType: ctrl.punch ? 'punch' : 'kick'
       });
     }
   }
