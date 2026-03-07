@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Stick Fight - UFC Octagon (Online)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  body { margin:0; height:100vh; background:#0a0015; overflow:hidden; color:#eee; font-family:Arial; }
+  
+  #menu, #lobby { 
+    position:absolute; inset:0; background:rgba(0,0,0,0.92); 
+    display:flex; flex-direction:column; justify-content:center; align-items:center; 
+    z-index:30; text-align:center; 
+  }
+  #lobby { display:none; }
+  
+  #game { 
+    position:relative; width:100%; height:100%; display:none; 
+    background:radial-gradient(circle at 50% 30%, #1a0033, #000); 
+  }
+  
+  #game::before { 
+    content:''; position:absolute; inset:0; 
+    background:radial-gradient(ellipse at 50% 50%, #001f3f 10%, #003366 40%, #001122); 
+    clip-path:polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); 
+    border:8px solid #222; box-shadow:inset 0 0 80px #000c; 
+  }
+  
+  .fighter { position:absolute; width:65px; height:140px; bottom:180px; }
+  .head, .body, .arm, .leg { background:#555; border-radius:10px; } /* simplified for brevity */
+  
+  #message { 
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); 
+    font-size:80px; color:#fff200; text-shadow:0 0 20px #ff00aa; 
+    opacity:0; z-index:20; transition:opacity 0.8s; 
+  }
+  
+  #health-bar-container { 
+    position:absolute; top:20px; width:100%; display:flex; justify-content:space-between; 
+    padding:0 40px; z-index:10; 
+  }
+  .health { height:24px; background:linear-gradient(90deg,#ff3040,#ff6b6b); transition:width 0.3s; }
+  .stamina { height:20px; background:linear-gradient(90deg,#ffd700,#ffaa00); transition:width 0.5s; }
+  
+  /* Back button */
+  #back-btn {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    padding: 10px 18px;
+    font-size: 18px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    z-index: 40;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s;
+  }
+  #back-btn:hover {
+    background: rgba(255,80,80,0.6);
+    transform: scale(1.05);
+  }
+  
+  #room-input, #name-input { 
+    padding:12px; font-size:18px; margin:10px; width:260px; border-radius:6px; border:none; 
+  }
+  button { 
+    padding:14px 28px; font-size:20px; margin:10px; border-radius:8px; cursor:pointer; 
+    background:#4a6; color:white; border:none; 
+  }
+</style>
+</head>
+<body>
+
+<div id="menu">
+  <h1>🥊 STICK FIGHT – ONLINE 🥊</h1>
+  <input id="name-input" placeholder="Your name" />
+  <input id="room-input" placeholder="Room code (or leave blank to create)" />
+  <button onclick="joinRoom()">Join / Create Room</button>
+  <p style="margin-top:50px; font-size:15px; opacity:0.7;">© Copyright 2026 © </p>
+</div>
+
+<div id="lobby">
+  <h2>Waiting for opponent...</h2>
+  <p>Room code: <strong id="roomCode"></strong></p>
+  <p>Share this code with your friend!</p>
+  <button id="back-btn" onclick="goBackToMenu()">Back to Menu</button>
+</div>
+
+<div id="game">
+  <button id="back-btn" onclick="goBackToMenu()">Back to Menu</button>
+  
+  <div id="health-bar-container">
+    <div style="width:380px;">
+      <div class="health" id="p1-hp" style="width:100%"></div>
+      <div class="stamina" id="p1-stamina" style="width:100%"></div>
+    </div>
+    <div style="width:380px; text-align:right;">
+      <div class="health" id="p2-hp" style="width:100%"></div>
+      <div class="stamina" id="p2-stamina" style="width:100%"></div>
+    </div>
+  </div>
+  
+  <div id="p1" class="fighter" style="left:20%;">
+    <div class="head"></div><div class="body"></div>
+  </div>
+  <div id="p2" class="fighter" style="right:20%;">
+    <div class="head"></div><div class="body"></div>
+  </div>
+  
+  <div id="message">FIGHT!</div>
+</div>
+
+<script>
+const socket = io('http://localhost:3000'); // ← change this to your deployed server URL
+
+let myId = null;
+let opponentId = null;
+let roomId = null;
+
+const p1 = { 
+  el: document.getElementById('p1'), 
+  hpBar: document.getElementById('p1-hp'),
+  staminaBar: document.getElementById('p1-stamina')
+};
+const p2 = { 
+  el: document.getElementById('p2'), 
+  hpBar: document.getElementById('p2-hp'),
+  staminaBar: document.getElementById('p2-stamina')
+};
+
+let keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup',   e => keys[e.code] = false);
+
+function joinRoom() {
+  const name = document.getElementById('name-input').value.trim() || "Player";
+  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2,8);
+
+  document.getElementById('menu').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  document.getElementById('roomCode').textContent = roomId;
+
+  socket.emit('joinGame', { roomId, name });
+}
+
+function goBackToMenu() {
+  // Disconnect from current room
+  if (socket && roomId) {
+    socket.emit('leaveRoom', roomId);
+  }
+  
+  // Reset UI and variables
+  document.getElementById('menu').style.display = 'flex';
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game').style.display = 'none';
+  
+  myId = null;
+  opponentId = null;
+  roomId = null;
+  
+  // Reset positions and bars (optional visual cleanup)
+  p1.hpBar.style.width = '100%';
+  p1.staminaBar.style.width = '100%';
+  p2.hpBar.style.width = '100%';
+  p2.staminaBar.style.width = '100%';
+}
+
+socket.on('currentState', (players) => {
+  Object.entries(players).forEach(([id, data]) => {
+    if (id === socket.id) {
+      myId = id;
+      p1.x = data.x;
+      p1.facing = data.facing;
+      updatePosition(p1);
+    } else {
+      opponentId = id;
+      p2.x = data.x;
+      p2.facing = data.facing;
+      updatePosition(p2);
+    }
+  });
+});
+
+socket.on('playerJoined', ({id, player}) => {
+  if (id !== socket.id) {
+    opponentId = id;
+    p2.x = player.x;
+    p2.facing = player.facing;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game').style.display = 'block';
+    document.getElementById('message').style.opacity = '1';
+    setTimeout(() => document.getElementById('message').style.opacity = '0', 2000);
+  }
+});
+
+socket.on('playerUpdate', (data) => {
+  if (data.id === socket.id) return;
+  if (!opponentId) return;
+
+  p2.x = data.x;
+  p2.facing = data.facing;
+  updatePosition(p2);
+});
+
+socket.on('applyDamage', (data) => {
+  if (data.targetId === socket.id) {
+    let hp = parseFloat(p1.hpBar.style.width) - data.damage;
+    p1.hpBar.style.width = Math.max(0, hp) + '%';
+  } else if (data.targetId === opponentId) {
+    let hp = parseFloat(p2.hpBar.style.width) - data.damage;
+    p2.hpBar.style.width = Math.max(0, hp) + '%';
+  }
+});
+
+function updatePosition(p) {
+  if (p.el) {
+    p.el.style.left = p.x + 'px';
+    p.el.style.transform = `scaleX(${p.facing})`;
+  }
+}
+
+function loop() {
+  if (document.getElementById('game').style.display !== 'block') {
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  const input = {
+    left: keys.KeyA || keys.ArrowLeft,
+    right: keys.KeyD || keys.ArrowRight,
+    jump: keys.KeyW || keys.ArrowUp,
+    crouched: keys.KeyS || keys.ArrowDown,
+    punch: keys.Space,
+    kick: keys.ShiftLeft || keys.ShiftRight,
+    block: keys.KeyF,
+    facing: keys.KeyD || keys.ArrowRight ? 1 : (keys.KeyA || keys.ArrowLeft ? -1 : undefined)
+  };
+
+  if (input.left || input.right || input.facing) {
+    socket.emit('playerInput', input);
+  }
+
+  // Simple local attack attempt (will improve with server authority later)
+  if (input.punch || input.kick) {
+    const dist = Math.abs(p1.x - p2.x);
+    if (dist < 140) {
+      const damage = input.punch ? 12 : 18;
+      socket.emit('attackHit', {
+        targetId: opponentId,
+        damage,
+        attackType: input.punch ? 'punch' : 'kick'
+      });
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+loop();
+
+// Optional: handle room full or errors
+socket.on('roomFull', () => {
+  alert("Room is full! Try another code.");
+  goBackToMenu();
+});
+</script>
+</body>
+</html>
