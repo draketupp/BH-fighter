@@ -6,81 +6,230 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
-  body { margin:0; height:100vh; background:#0a0015; overflow:hidden; color:#eee; font-family:Arial; }
-  
-  #menu, #lobby { 
-    position:absolute; inset:0; background:rgba(0,0,0,0.92); 
-    display:flex; flex-direction:column; justify-content:center; align-items:center; 
-    z-index:30; text-align:center; 
+  body {
+    margin: 0;
+    height: 100vh;
+    background: #0a0015;
+    overflow: hidden;
+    color: #eee;
+    font-family: Arial, sans-serif;
   }
-  #lobby { display:none; }
-  
-  #game { 
-    position:relative; width:100%; height:100%; display:none; 
-    background:radial-gradient(circle at 50% 30%, #1a0033, #000); 
+
+  #menu, #lobby {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 30;
+    text-align: center;
   }
-  
-  #game::before { 
-    content:''; position:absolute; inset:0; 
-    background:radial-gradient(ellipse at 50% 50%, #001f3f 10%, #003366 40%, #001122); 
-    clip-path:polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); 
-    border:8px solid #222; box-shadow:inset 0 0 80px #000c; 
+  #lobby { display: none; }
+
+  #game {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: none;
+    background: #000814;
+    overflow: hidden;
+    transition: transform 0.08s;
   }
-  
-  .fighter { position:absolute; width:65px; height:140px; bottom:180px; }
-  .head, .body, .arm, .leg { background:#555; border-radius:10px; } /* simplified for brevity */
-  
-  #message { 
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); 
-    font-size:80px; color:#fff200; text-shadow:0 0 20px #ff00aa; 
-    opacity:0; z-index:20; transition:opacity 0.8s; 
+
+  #game.impact {
+    animation: impactShake 0.4s ease-out;
   }
-  
-  #health-bar-container { 
-    position:absolute; top:20px; width:100%; display:flex; justify-content:space-between; 
-    padding:0 40px; z-index:10; 
+
+  @keyframes impactShake {
+    0% { transform: translate(0,0) scale(1); }
+    20% { transform: translate(6px, -4px) scale(1.015); }
+    40% { transform: translate(-8px, 6px) scale(1.01); }
+    60% { transform: translate(4px, -3px) scale(1.008); }
+    80% { transform: translate(-3px, 2px) scale(1.004); }
+    100% { transform: translate(0,0) scale(1); }
   }
-  .health { height:24px; background:linear-gradient(90deg,#ff3040,#ff6b6b); transition:width 0.3s; }
-  .stamina { height:20px; background:linear-gradient(90deg,#ffd700,#ffaa00); transition:width 0.5s; }
-  
-  /* Back button */
+
+  #game::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 50%, #1a0d00 0%, #0d0700 40%, #000 70%),
+      repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.015) 20px, rgba(255,255,255,0.015) 40px),
+      repeating-linear-gradient(-45deg, transparent, transparent 20px, rgba(255,255,255,0.015) 20px, rgba(255,255,255,0.015) 40px);
+    clip-path: polygon(50% 8%, 92% 25%, 100% 50%, 92% 75%, 50% 92%, 8% 75%, 0% 50%, 8% 25%);
+    border: 12px solid #222;
+    box-shadow: inset 0 0 120px #000, 0 0 80px #001122, inset 0 0 60px #330000;
+    z-index: 0;
+  }
+
+  #game::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(transparent 0%, rgba(80,80,100,0.15) 10%, rgba(80,80,100,0.25) 30%, transparent 50%),
+      repeating-linear-gradient(0deg, transparent 0px, transparent 4px, #555 4px, #555 5px),
+      repeating-linear-gradient(90deg, transparent 0px, transparent 4px, #555 4px, #555 5px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: screen;
+  }
+
+  .corner-light {
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,40,40,0.18) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  #light1 { top: -180px; left: -100px; }
+  #light2 { top: -180px; right: -100px; transform: scaleX(-1); }
+  #light3 { bottom: -180px; left: -100px; transform: scaleY(-1); }
+  #light4 { bottom: -180px; right: -100px; transform: scale(-1); }
+
+  .fighter {
+    position: absolute;
+    width: 65px;
+    height: 140px;
+    transition: filter 0.12s, transform 0.08s;
+    z-index: 5;
+  }
+
+  .fighter.hit {
+    animation: hitFlash 0.35s ease-out;
+  }
+
+  @keyframes hitFlash {
+    0%   { filter: brightness(1) hue-rotate(0deg); transform: scale(1.08); }
+    40%  { filter: brightness(2.2) hue-rotate(340deg); transform: scale(1.12); }
+    70%  { filter: brightness(1.6) hue-rotate(20deg); transform: scale(1.04); }
+    100% { filter: brightness(1) hue-rotate(0deg); transform: scale(1); }
+  }
+
+  .combo-counter {
+    position: absolute;
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    font-weight: bold;
+    color: #ffea00;
+    text-shadow: 0 0 12px #ff6d00;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 6;
+    transition: opacity 0.4s;
+  }
+
+  .impact-particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: #fff;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 6;
+    animation: particleBurst 0.6s forwards;
+    box-shadow: 0 0 12px #ffea00;
+  }
+
+  .impact-particle.kick {
+    background: #ffea80;
+    width: 9px;
+    height: 9px;
+    box-shadow: 0 0 18px #ff9800;
+  }
+
+  @keyframes particleBurst {
+    0%   { transform: scale(0.3) translate(0,0); opacity: 0.9; }
+    40%  { transform: scale(1.4) translate(var(--dx), var(--dy)); opacity: 1; }
+    100% { transform: scale(0.1) translate(calc(var(--dx) * 2), calc(var(--dy) * 2)); opacity: 0; }
+  }
+
+  #message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 90px;
+    font-weight: bold;
+    color: #fff200;
+    text-shadow: 0 0 30px #ff0044, 0 0 60px #ff0044;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s;
+    z-index: 20;
+  }
+
+  #health-bar-container {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 50px;
+    box-sizing: border-box;
+    z-index: 10;
+  }
+
+  .bar-group {
+    width: 420px;
+  }
+
+  .health-bar, .stamina-bar {
+    height: 26px;
+    background: #111;
+    border: 3px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 12px #0008;
+  }
+
+  .health {
+    height: 100%;
+    background: linear-gradient(90deg, #d32f2f, #f44336);
+    transition: width 0.4s ease-out;
+  }
+
+  .stamina {
+    height: 100%;
+    background: linear-gradient(90deg, #fbc02d, #ff9800);
+    transition: width 0.5s ease-out;
+  }
+
   #back-btn {
     position: absolute;
     top: 15px;
     left: 15px;
     padding: 10px 18px;
     font-size: 18px;
-    background: rgba(255,255,255,0.15);
-    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.35);
     color: white;
     border-radius: 8px;
     cursor: pointer;
     z-index: 40;
-    backdrop-filter: blur(4px);
-    transition: all 0.2s;
+    backdrop-filter: blur(6px);
   }
   #back-btn:hover {
-    background: rgba(255,80,80,0.6);
-    transform: scale(1.05);
-  }
-  
-  #room-input, #name-input { 
-    padding:12px; font-size:18px; margin:10px; width:260px; border-radius:6px; border:none; 
-  }
-  button { 
-    padding:14px 28px; font-size:20px; margin:10px; border-radius:8px; cursor:pointer; 
-    background:#4a6; color:white; border:none; 
+    background: rgba(244,67,54,0.5);
   }
 </style>
 </head>
 <body>
 
 <div id="menu">
-  <h1>🥊 STICK FIGHT – ONLINE 🥊</h1>
+  <h1>🥊 STICK FIGHT – UFC OCTAGON 🥊</h1>
   <input id="name-input" placeholder="Your name" />
-  <input id="room-input" placeholder="Room code (or leave blank to create)" />
-  <button onclick="joinRoom()">Join / Create Room</button>
-  <p style="margin-top:50px; font-size:15px; opacity:0.7;">© Copyright 2026 © </p>
+  <input id="room-input" placeholder="Room code (leave blank to create)" />
+  <button onclick="joinRoom()">Join / Create</button>
+  <p style="margin-top:50px; font-size:15px; opacity:0.7;">© Copyright 2026</p>
 </div>
 
 <div id="lobby">
@@ -92,44 +241,90 @@
 
 <div id="game">
   <button id="back-btn" onclick="goBackToMenu()">Back to Menu</button>
-  
+
+  <div class="corner-light" id="light1"></div>
+  <div class="corner-light" id="light2"></div>
+  <div class="corner-light" id="light3"></div>
+  <div class="corner-light" id="light4"></div>
+
   <div id="health-bar-container">
-    <div style="width:380px;">
-      <div class="health" id="p1-hp" style="width:100%"></div>
-      <div class="stamina" id="p1-stamina" style="width:100%"></div>
+    <div class="bar-group">
+      <div class="health-bar"><div class="health" id="p1-hp"></div></div>
+      <div class="stamina-bar"><div class="stamina" id="p1-stamina"></div></div>
     </div>
-    <div style="width:380px; text-align:right;">
-      <div class="health" id="p2-hp" style="width:100%"></div>
-      <div class="stamina" id="p2-stamina" style="width:100%"></div>
+    <div class="bar-group" style="text-align:right;">
+      <div class="health-bar"><div class="health" id="p2-hp"></div></div>
+      <div class="stamina-bar"><div class="stamina" id="p2-stamina"></div></div>
     </div>
   </div>
-  
+
   <div id="p1" class="fighter" style="left:20%;">
-    <div class="head"></div><div class="body"></div>
+    <div class="head"></div>
+    <div class="body"></div>
+    <div class="combo-counter" id="p1-combo">COMBO ×3!</div>
   </div>
   <div id="p2" class="fighter" style="right:20%;">
-    <div class="head"></div><div class="body"></div>
+    <div class="head"></div>
+    <div class="body"></div>
+    <div class="combo-counter" id="p2-combo">COMBO ×3!</div>
   </div>
-  
+
   <div id="message">FIGHT!</div>
 </div>
 
+<!-- Audio -->
+<audio id="cheer-start" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-start.mp3" type="audio/mpeg"></audio>
+<audio id="cheer-normal" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-medium.mp3" type="audio/mpeg"></audio>
+<audio id="cheer-big" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-big.mp3" type="audio/mpeg"></audio>
+<audio id="cheer-near-ko" preload="auto"><source src="https://assets.codepen.io/243235/crowd-excited-near-ko.mp3" type="audio/mpeg"></audio>
+<audio id="punch-impact" preload="auto"><source src="https://assets.codepen.io/243235/punch-impact-hard.mp3" type="audio/mpeg"></audio>
+<audio id="kick-impact" preload="auto"><source src="https://assets.codepen.io/243235/kick-impact-strong.mp3" type="audio/mpeg"></audio>
+
 <script>
-const socket = io('http://localhost:3000'); // ← change this to your deployed server URL
+const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR SERVER URL WHEN DEPLOYED
 
 let myId = null;
 let opponentId = null;
 let roomId = null;
 
-const p1 = { 
-  el: document.getElementById('p1'), 
+const menuEl   = document.getElementById('menu');
+const lobbyEl  = document.getElementById('lobby');
+const gameEl   = document.getElementById('game');
+const msgEl    = document.getElementById('message');
+const roomCodeEl = document.getElementById('roomCode');
+
+// Audio
+const cheerStart    = document.getElementById('cheer-start');
+const cheerNormal   = document.getElementById('cheer-normal');
+const cheerBig      = document.getElementById('cheer-big');
+const cheerNearKO   = document.getElementById('cheer-near-ko');
+const punchImpact   = document.getElementById('punch-impact');
+const kickImpact    = document.getElementById('kick-impact');
+
+const p1 = {
+  el: document.getElementById('p1'),
   hpBar: document.getElementById('p1-hp'),
-  staminaBar: document.getElementById('p1-stamina')
+  staminaBar: document.getElementById('p1-stamina'),
+  comboEl: document.getElementById('p1-combo'),
+  x: 200,
+  facing: 1,
+  hp: 100,
+  stamina: 100,
+  comboCount: 0,
+  lastHitTime: 0
 };
-const p2 = { 
-  el: document.getElementById('p2'), 
+
+const p2 = {
+  el: document.getElementById('p2'),
   hpBar: document.getElementById('p2-hp'),
-  staminaBar: document.getElementById('p2-stamina')
+  staminaBar: document.getElementById('p2-stamina'),
+  comboEl: document.getElementById('p2-combo'),
+  x: 800,
+  facing: -1,
+  hp: 100,
+  stamina: 100,
+  comboCount: 0,
+  lastHitTime: 0
 };
 
 let keys = {};
@@ -138,31 +333,27 @@ window.addEventListener('keyup',   e => keys[e.code] = false);
 
 function joinRoom() {
   const name = document.getElementById('name-input').value.trim() || "Player";
-  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2,8);
+  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2, 9);
 
-  document.getElementById('menu').style.display = 'none';
-  document.getElementById('lobby').style.display = 'flex';
-  document.getElementById('roomCode').textContent = roomId;
+  menuEl.style.display = 'none';
+  lobbyEl.style.display = 'flex';
+  roomCodeEl.textContent = roomId;
 
   socket.emit('joinGame', { roomId, name });
 }
 
 function goBackToMenu() {
-  // Disconnect from current room
-  if (socket && roomId) {
-    socket.emit('leaveRoom', roomId);
-  }
-  
-  // Reset UI and variables
-  document.getElementById('menu').style.display = 'flex';
-  document.getElementById('lobby').style.display = 'none';
-  document.getElementById('game').style.display = 'none';
-  
+  if (roomId) socket.emit('leaveRoom', roomId);
+
+  menuEl.style.display = 'flex';
+  lobbyEl.style.display = 'none';
+  gameEl.style.display = 'none';
+  msgEl.style.opacity = '0';
+
   myId = null;
   opponentId = null;
   roomId = null;
-  
-  // Reset positions and bars (optional visual cleanup)
+
   p1.hpBar.style.width = '100%';
   p1.staminaBar.style.width = '100%';
   p2.hpBar.style.width = '100%';
@@ -175,56 +366,196 @@ socket.on('currentState', (players) => {
       myId = id;
       p1.x = data.x;
       p1.facing = data.facing;
+      p1.hp = data.hp ?? 100;
+      p1.stamina = data.stamina ?? 100;
+      p1.hpBar.style.width = p1.hp + '%';
+      p1.staminaBar.style.width = p1.stamina + '%';
       updatePosition(p1);
     } else {
       opponentId = id;
       p2.x = data.x;
       p2.facing = data.facing;
+      p2.hp = data.hp ?? 100;
+      p2.stamina = data.stamina ?? 100;
+      p2.hpBar.style.width = p2.hp + '%';
+      p2.staminaBar.style.width = p2.stamina + '%';
       updatePosition(p2);
     }
   });
-});
 
-socket.on('playerJoined', ({id, player}) => {
-  if (id !== socket.id) {
-    opponentId = id;
-    p2.x = player.x;
-    p2.facing = player.facing;
-    document.getElementById('lobby').style.display = 'none';
-    document.getElementById('game').style.display = 'block';
-    document.getElementById('message').style.opacity = '1';
-    setTimeout(() => document.getElementById('message').style.opacity = '0', 2000);
+  if (Object.keys(players).length === 2) {
+    startGameScreen();
   }
 });
 
+socket.on('playerJoined', ({id, player}) => {
+  if (id === socket.id) return;
+
+  opponentId = id;
+  p2.x = player.x;
+  p2.facing = player.facing;
+  p2.hp = player.hp ?? 100;
+  p2.stamina = player.stamina ?? 100;
+  p2.hpBar.style.width = p2.hp + '%';
+  p2.staminaBar.style.width = p2.stamina + '%';
+  updatePosition(p2);
+
+  startGameScreen();
+});
+
+socket.on('gameStart', startGameScreen);
+
+function startGameScreen() {
+  lobbyEl.style.display = 'none';
+  gameEl.style.display = 'block';
+  msgEl.textContent = "FIGHT!";
+  msgEl.style.opacity = '1';
+
+  cheerStart.currentTime = 0;
+  cheerStart.volume = 0.6;
+  cheerStart.play().catch(() => {});
+
+  setTimeout(() => msgEl.style.opacity = '0', 2200);
+}
+
 socket.on('playerUpdate', (data) => {
   if (data.id === socket.id) return;
-  if (!opponentId) return;
 
   p2.x = data.x;
   p2.facing = data.facing;
   updatePosition(p2);
 });
 
-socket.on('applyDamage', (data) => {
-  if (data.targetId === socket.id) {
-    let hp = parseFloat(p1.hpBar.style.width) - data.damage;
-    p1.hpBar.style.width = Math.max(0, hp) + '%';
-  } else if (data.targetId === opponentId) {
-    let hp = parseFloat(p2.hpBar.style.width) - data.damage;
-    p2.hpBar.style.width = Math.max(0, hp) + '%';
-  }
-});
+function showCombo(fighter, count) {
+  const comboEl = fighter.comboEl;
+  comboEl.textContent = `COMBO ×${count}!`;
+  comboEl.style.opacity = '1';
+  setTimeout(() => comboEl.style.opacity = '0', 1800);
+}
 
-function updatePosition(p) {
-  if (p.el) {
-    p.el.style.left = p.x + 'px';
-    p.el.style.transform = `scaleX(${p.facing})`;
+function createImpactParticles(x, y, isKick = false, count = 12) {
+  for (let i = 0; i < count; i++) {
+    const particle = document.createElement('div');
+    particle.className = 'impact-particle' + (isKick ? ' kick' : '');
+    
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 30 + Math.random() * 60;
+    const dx = Math.cos(angle) * distance;
+    const dy = Math.sin(angle) * distance - 20;
+
+    particle.style.setProperty('--dx', dx + 'px');
+    particle.style.setProperty('--dy', dy + 'px');
+    
+    particle.style.left = (x + dx * 0.3) + 'px';
+    particle.style.bottom = (y + dy * 0.3 + 60) + 'px';
+
+    gameEl.appendChild(particle);
+    setTimeout(() => particle.remove(), 700);
   }
 }
 
+socket.on('applyDamage', (data) => {
+  let targetEl, targetHpBar, targetHp, targetPlayer;
+
+  if (data.targetId === socket.id) {
+    targetEl = p1.el;
+    targetHpBar = p1.hpBar;
+    targetHp = p1.hp = Math.max(0, p1.hp - data.damage);
+    targetPlayer = p1;
+  } else if (data.targetId === opponentId) {
+    targetEl = p2.el;
+    targetHpBar = p2.hpBar;
+    targetHp = p2.hp = Math.max(0, p2.hp - data.damage);
+    targetPlayer = p2;
+  }
+
+  if (targetEl && targetHpBar) {
+    targetHpBar.style.width = targetHp + '%';
+
+    // Hit feedback
+    targetEl.classList.add('hit');
+    setTimeout(() => targetEl.classList.remove('hit'), 400);
+
+    const hitX = (parseFloat(targetEl.style.left) || 0) + 32;
+    const hitY = 140;
+
+    // Combo logic (client-side approximation for animation)
+    const now = Date.now();
+    if (now - targetPlayer.lastHitTime < 1200) {
+      targetPlayer.comboCount++;
+      if (targetPlayer.comboCount >= 3) {
+        targetPlayer.comboCount = 0;
+        showCombo(targetPlayer, 3);
+        // Bigger combo effect
+        createImpactParticles(hitX, hitY, true, 24);
+        gameEl.classList.add('impact');
+        setTimeout(() => gameEl.classList.remove('impact'), 500);
+        cheerBig.currentTime = 0;
+        cheerBig.volume = 0.8;
+        cheerBig.play().catch(() => {});
+      } else {
+        showCombo(targetPlayer, targetPlayer.comboCount);
+      }
+    } else {
+      targetPlayer.comboCount = 1;
+      showCombo(targetPlayer, 1);
+    }
+    targetPlayer.lastHitTime = now;
+
+    createImpactParticles(hitX, hitY, data.attackType === 'kick', data.damage > 15 ? 18 : 10);
+
+    if (data.damage > 14) {
+      gameEl.classList.add('impact');
+      setTimeout(() => gameEl.classList.remove('impact'), 400);
+    }
+
+    // Sounds
+    if (data.attackType === 'punch') {
+      punchImpact.currentTime = 0;
+      punchImpact.volume = 0.7 + Math.random() * 0.2;
+      punchImpact.play().catch(() => {});
+    } else if (data.attackType === 'kick') {
+      kickImpact.currentTime = 0;
+      kickImpact.volume = 0.75 + Math.random() * 0.15;
+      kickImpact.play().catch(() => {});
+    }
+
+    // Crowd
+    if (targetHp <= 30) {
+      cheerNearKO.currentTime = 0;
+      cheerNearKO.volume = 0.7;
+      cheerNearKO.play().catch(() => {});
+    } else if (Math.random() < 0.65) {
+      cheerNormal.currentTime = 0;
+      cheerNormal.volume = 0.5 + Math.random() * 0.2;
+      cheerNormal.play().catch(() => {});
+    } else {
+      cheerBig.currentTime = 0;
+      cheerBig.volume = 0.55;
+      cheerBig.play().catch(() => {});
+    }
+  }
+});
+
+socket.on('playerLeft', (id) => {
+  if (id === opponentId) {
+    alert("Opponent left the room.");
+    goBackToMenu();
+  }
+});
+
+socket.on('roomFull', () => {
+  alert("This room is already full!");
+  goBackToMenu();
+});
+
+function updatePosition(p) {
+  p.el.style.left = p.x + 'px';
+  p.el.style.transform = `scaleX(${p.facing})`;
+}
+
 function loop() {
-  if (document.getElementById('game').style.display !== 'block') {
+  if (gameEl.style.display !== 'block') {
     requestAnimationFrame(loop);
     return;
   }
@@ -232,19 +563,17 @@ function loop() {
   const input = {
     left: keys.KeyA || keys.ArrowLeft,
     right: keys.KeyD || keys.ArrowRight,
-    jump: keys.KeyW || keys.ArrowUp,
     crouched: keys.KeyS || keys.ArrowDown,
     punch: keys.Space,
     kick: keys.ShiftLeft || keys.ShiftRight,
     block: keys.KeyF,
-    facing: keys.KeyD || keys.ArrowRight ? 1 : (keys.KeyA || keys.ArrowLeft ? -1 : undefined)
+    facing: (keys.KeyD || keys.ArrowRight) ? 1 : ((keys.KeyA || keys.ArrowLeft) ? -1 : undefined)
   };
 
-  if (input.left || input.right || input.facing) {
+  if (input.left || input.right || input.crouched || input.punch || input.kick || input.block || input.facing) {
     socket.emit('playerInput', input);
   }
 
-  // Simple local attack attempt (will improve with server authority later)
   if (input.punch || input.kick) {
     const dist = Math.abs(p1.x - p2.x);
     if (dist < 140) {
@@ -261,12 +590,6 @@ function loop() {
 }
 
 loop();
-
-// Optional: handle room full or errors
-socket.on('roomFull', () => {
-  alert("Room is full! Try another code.");
-  goBackToMenu();
-});
 </script>
 </body>
 </html>
