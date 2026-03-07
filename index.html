@@ -89,6 +89,21 @@
     z-index: 5;
   }
 
+  #countdown {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 180px;
+    font-weight: bold;
+    color: #ff0044;
+    text-shadow: 0 0 40px #ff0044, 0 0 80px #ff0044;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 25;
+    transition: opacity 0.4s;
+  }
+
   #message {
     position: absolute;
     top: 50%;
@@ -141,25 +156,45 @@
     transition: width 0.5s ease-out;
   }
 
+  #back-btn, #start-game-btn {
+    padding: 18px 48px;
+    font-size: 1.8rem;
+    margin: 30px 0;
+    border-radius: 12px;
+    cursor: pointer;
+    border: none;
+    color: white;
+  }
+
   #back-btn {
     position: absolute;
-    top: 15px;
-    left: 15px;
-    padding: 10px 18px;
-    font-size: 18px;
+    top: 25px;
+    left: 25px;
     background: rgba(255,255,255,0.12);
     border: 1px solid rgba(255,255,255,0.35);
-    color: white;
-    border-radius: 8px;
-    cursor: pointer;
-    z-index: 40;
     backdrop-filter: blur(6px);
   }
   #back-btn:hover {
     background: rgba(244,67,54,0.5);
   }
 
-  /* ── Mobile Touch Controls ──────────────────────────────────────────────── */
+  #start-game-btn {
+    background: linear-gradient(135deg, #06d6a0, #118ab2);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+    transition: all 0.2s;
+  }
+  #start-game-btn:hover {
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 12px 35px rgba(0,0,0,0.6);
+  }
+  #start-game-btn:disabled {
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+  }
+
+  /* Mobile Touch Controls */
   #touch-controls {
     position: absolute;
     inset: 0;
@@ -248,6 +283,8 @@
   <h2>Waiting for opponent...</h2>
   <p>Room code: <strong id="roomCode"></strong></p>
   <p>Share this code with your friend!</p>
+  
+  <button id="start-game-btn" disabled onclick="startMatch()">Start Game</button>
   <button id="back-btn" onclick="goBackToMenu()">Back to Menu</button>
 </div>
 
@@ -280,6 +317,7 @@
   </div>
 
   <div id="message">FIGHT!</div>
+  <div id="countdown"></div>
 
   <!-- Mobile Touch Controls -->
   <div id="touch-controls">
@@ -301,25 +339,15 @@ const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR SERVER URL WHE
 let myId = null;
 let opponentId = null;
 let roomId = null;
+let isHost = false;
 
 const menuEl   = document.getElementById('menu');
 const lobbyEl  = document.getElementById('lobby');
 const gameEl   = document.getElementById('game');
 const msgEl    = document.getElementById('message');
+const countdownEl = document.getElementById('countdown');
 const roomCodeEl = document.getElementById('roomCode');
-
-// Touch state
-let joystickActive = false;
-let joystickCenterX = 0;
-let joystickCenterY = 0;
-let joystickTouchId = null;
-let joystickDir = { x: 0, y: 0 };
-
-let touchJump  = false;
-let touchPunch = false;
-let touchKick  = false;
-let touchBlock = false;
-let touchCrouch = false;
+const startBtn  = document.getElementById('start-game-btn');
 
 const p1 = {
   el: document.getElementById('p1'),
@@ -345,11 +373,23 @@ let keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup',   e => keys[e.code] = false);
 
-// ── Touch Joystick ────────────────────────────────────────────────────────
-const joystick = document.getElementById('joystick');
-const stick = document.getElementById('stick');
+// Touch controls (unchanged from previous version)
+let joystickActive = false;
+let joystickCenterX = 0;
+let joystickCenterY = 0;
+let joystickTouchId = null;
+let joystickDir = { x: 0, y: 0 };
 
-joystick.addEventListener('touchstart', e => {
+let touchJump  = false;
+let touchPunch = false;
+let touchKick  = false;
+let touchBlock = false;
+let touchCrouch = false;
+
+const joystickEl = document.getElementById('joystick');
+const stickEl    = document.getElementById('stick');
+
+joystickEl.addEventListener('touchstart', e => {
   e.preventDefault();
   if (joystickTouchId === null && e.changedTouches.length > 0) {
     joystickTouchId = e.changedTouches[0].identifier;
@@ -357,7 +397,7 @@ joystick.addEventListener('touchstart', e => {
   }
 }, { passive: false });
 
-joystick.addEventListener('touchmove', e => {
+joystickEl.addEventListener('touchmove', e => {
   e.preventDefault();
   for (let touch of e.changedTouches) {
     if (touch.identifier === joystickTouchId) {
@@ -367,7 +407,7 @@ joystick.addEventListener('touchmove', e => {
   }
 }, { passive: false });
 
-joystick.addEventListener('touchend', e => {
+joystickEl.addEventListener('touchend', e => {
   e.preventDefault();
   for (let touch of e.changedTouches) {
     if (touch.identifier === joystickTouchId) {
@@ -380,7 +420,7 @@ joystick.addEventListener('touchend', e => {
 
 function updateJoystick(touch) {
   if (!joystickActive) {
-    const rect = joystick.getBoundingClientRect();
+    const rect = joystickEl.getBoundingClientRect();
     joystickCenterX = rect.left + rect.width / 2;
     joystickCenterY = rect.top + rect.height / 2;
     joystickActive = true;
@@ -392,29 +432,27 @@ function updateJoystick(touch) {
   const maxDist = 80;
 
   if (dist > maxDist) {
-    dx = dx * maxDist / dist;
-    dy = dy * maxDist / dist;
+    dx *= maxDist / dist;
+    dy *= maxDist / dist;
   }
 
-  stick.style.left = `${dx + 80}px`;
-  stick.style.top  = `${dy + 80}px`;
+  stickEl.style.left = `${dx + 80}px`;
+  stickEl.style.top  = `${dy + 80}px`;
 
   joystickDir.x = dx / maxDist;
   joystickDir.y = dy / maxDist;
 
-  // Crouch if dragging down strongly
   touchCrouch = joystickDir.y > 0.6;
 }
 
 function resetJoystick() {
   joystickActive = false;
   joystickDir = { x: 0, y: 0 };
-  stick.style.left = '50%';
-  stick.style.top  = '50%';
+  stickEl.style.left = '50%';
+  stickEl.style.top  = '50%';
   touchCrouch = false;
 }
 
-// ── Action Buttons ────────────────────────────────────────────────────────
 document.getElementById('jump-btn').addEventListener('touchstart', e => { e.preventDefault(); touchJump = true; });
 document.getElementById('jump-btn').addEventListener('touchend',   e => { e.preventDefault(); touchJump = false; });
 
@@ -427,7 +465,6 @@ document.getElementById('kick-btn').addEventListener('touchend',   e => { e.prev
 document.getElementById('block-btn').addEventListener('touchstart', e => { e.preventDefault(); touchBlock = true; });
 document.getElementById('block-btn').addEventListener('touchend',   e => { e.preventDefault(); touchBlock = false; });
 
-// ── Get Controls (keyboard + touch) ───────────────────────────────────────
 function getControls() {
   return {
     left:   keys.KeyA || keys.ArrowLeft   || joystickDir.x < -0.3,
@@ -441,14 +478,23 @@ function getControls() {
   };
 }
 
-// ── Rest of your game logic (unchanged except controls input) ─────────────
 function joinRoom() {
   const name = document.getElementById('name-input').value.trim() || "Player";
-  roomId = document.getElementById('room-input').value.trim() || Math.random().toString(36).slice(2,9);
+  const inputRoom = document.getElementById('room-input').value.trim();
+
+  isHost = !inputRoom;
+  roomId = inputRoom || Math.random().toString(36).slice(2,9);
 
   menuEl.style.display = 'none';
   lobbyEl.style.display = 'flex';
   roomCodeEl.textContent = roomId;
+
+  if (isHost) {
+    startBtn.disabled = true;
+    startBtn.textContent = "Waiting for opponent...";
+  } else {
+    startBtn.style.display = 'none';
+  }
 
   socket.emit('joinGame', { roomId, name });
 }
@@ -460,15 +506,44 @@ function goBackToMenu() {
   lobbyEl.style.display = 'none';
   gameEl.style.display = 'none';
   msgEl.style.opacity = '0';
+  countdownEl.style.opacity = '0';
 
   myId = null;
   opponentId = null;
   roomId = null;
+  isHost = false;
+
+  startBtn.disabled = true;
+  startBtn.textContent = "Start Game";
+  startBtn.style.display = 'block';
 
   p1.hpBar.style.width = '100%';
   p1.staminaBar.style.width = '100%';
   p2.hpBar.style.width = '100%';
   p2.staminaBar.style.width = '100%';
+}
+
+function startMatch() {
+  if (!isHost || startBtn.disabled) return;
+  socket.emit('startGame', roomId);
+}
+
+function showCountdown() {
+  countdownEl.style.opacity = '1';
+  let count = 3;
+
+  const interval = setInterval(() => {
+    countdownEl.textContent = count;
+    count--;
+
+    if (count < 0) {
+      clearInterval(interval);
+      countdownEl.style.opacity = '0';
+      msgEl.textContent = "FIGHT!";
+      msgEl.style.opacity = '1';
+      setTimeout(() => msgEl.style.opacity = '0', 2200);
+    }
+  }, 1000);
 }
 
 socket.on('currentState', (players) => {
@@ -492,8 +567,9 @@ socket.on('currentState', (players) => {
     }
   });
 
-  if (Object.keys(players).length === 2) {
-    startGameScreen();
+  if (Object.keys(players).length === 2 && isHost) {
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Game";
   }
 });
 
@@ -508,16 +584,17 @@ socket.on('playerJoined', ({id, player}) => {
   p2.hpBar.style.width = p2.hp + '%';
   p2.staminaBar.style.width = p2.stamina + '%';
 
-  startGameScreen();
+  if (isHost) {
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Game";
+  }
 });
 
-function startGameScreen() {
+socket.on('gameStart', () => {
   lobbyEl.style.display = 'none';
   gameEl.style.display = 'block';
-  msgEl.textContent = "FIGHT!";
-  msgEl.style.opacity = '1';
-  setTimeout(() => msgEl.style.opacity = '0', 2200);
-}
+  showCountdown();
+});
 
 socket.on('playerUpdate', (data) => {
   if (data.id === socket.id) return;
