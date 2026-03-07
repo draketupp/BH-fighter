@@ -333,7 +333,7 @@
 </div>
 
 <script>
-const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR SERVER URL WHEN DEPLOYED
+const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR DEPLOYED SERVER URL
 
 let myId = null;
 let opponentId = null;
@@ -372,7 +372,7 @@ let keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup',   e => keys[e.code] = false);
 
-// Touch controls state
+// ── Touch Controls ────────────────────────────────────────────────────────
 let joystickActive = false;
 let joystickCenterX = 0;
 let joystickCenterY = 0;
