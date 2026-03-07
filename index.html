@@ -183,7 +183,7 @@
     box-shadow: 0 8px 25px rgba(0,0,0,0.5);
     transition: all 0.2s;
   }
-  #start-game-btn:hover {
+  #start-game-btn:hover:not(:disabled) {
     transform: translateY(-4px) scale(1.05);
     box-shadow: 0 12px 35px rgba(0,0,0,0.6);
   }
@@ -191,7 +191,6 @@
     background: #555;
     cursor: not-allowed;
     opacity: 0.6;
-    transform: none;
   }
 
   /* Mobile Touch Controls */
@@ -373,7 +372,7 @@ let keys = {};
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup',   e => keys[e.code] = false);
 
-// Touch controls (unchanged from previous version)
+// Touch controls state
 let joystickActive = false;
 let joystickCenterX = 0;
 let joystickCenterY = 0;
@@ -482,7 +481,7 @@ function joinRoom() {
   const name = document.getElementById('name-input').value.trim() || "Player";
   const inputRoom = document.getElementById('room-input').value.trim();
 
-  isHost = !inputRoom;
+  isHost = inputRoom === '';
   roomId = inputRoom || Math.random().toString(36).slice(2,9);
 
   menuEl.style.display = 'none';
@@ -492,6 +491,7 @@ function joinRoom() {
   if (isHost) {
     startBtn.disabled = true;
     startBtn.textContent = "Waiting for opponent...";
+    startBtn.style.display = 'block';
   } else {
     startBtn.style.display = 'none';
   }
@@ -590,11 +590,7 @@ socket.on('playerJoined', ({id, player}) => {
   }
 });
 
-socket.on('gameStart', () => {
-  lobbyEl.style.display = 'none';
-  gameEl.style.display = 'block';
-  showCountdown();
-});
+socket.on('gameStart', showCountdown);
 
 socket.on('playerUpdate', (data) => {
   if (data.id === socket.id) return;
