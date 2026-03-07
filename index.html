@@ -35,20 +35,6 @@
     display: none;
     background: #000814;
     overflow: hidden;
-    transition: transform 0.08s;
-  }
-
-  #game.impact {
-    animation: impactShake 0.4s ease-out;
-  }
-
-  @keyframes impactShake {
-    0% { transform: translate(0,0) scale(1); }
-    20% { transform: translate(6px, -4px) scale(1.015); }
-    40% { transform: translate(-8px, 6px) scale(1.01); }
-    60% { transform: translate(4px, -3px) scale(1.008); }
-    80% { transform: translate(-3px, 2px) scale(1.004); }
-    100% { transform: translate(0,0) scale(1); }
   }
 
   #game::before {
@@ -96,59 +82,8 @@
     position: absolute;
     width: 65px;
     height: 140px;
-    transition: filter 0.12s, transform 0.08s;
+    transition: none;
     z-index: 5;
-  }
-
-  .fighter.hit {
-    animation: hitFlash 0.35s ease-out;
-  }
-
-  @keyframes hitFlash {
-    0%   { filter: brightness(1) hue-rotate(0deg); transform: scale(1.08); }
-    40%  { filter: brightness(2.2) hue-rotate(340deg); transform: scale(1.12); }
-    70%  { filter: brightness(1.6) hue-rotate(20deg); transform: scale(1.04); }
-    100% { filter: brightness(1) hue-rotate(0deg); transform: scale(1); }
-  }
-
-  .combo-counter {
-    position: absolute;
-    top: -60px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    font-weight: bold;
-    color: #ffea00;
-    text-shadow: 0 0 12px #ff6d00;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 6;
-    transition: opacity 0.4s;
-  }
-
-  .impact-particle {
-    position: absolute;
-    width: 6px;
-    height: 6px;
-    background: #fff;
-    border-radius: 50%;
-    pointer-events: none;
-    z-index: 6;
-    animation: particleBurst 0.6s forwards;
-    box-shadow: 0 0 12px #ffea00;
-  }
-
-  .impact-particle.kick {
-    background: #ffea80;
-    width: 9px;
-    height: 9px;
-    box-shadow: 0 0 18px #ff9800;
-  }
-
-  @keyframes particleBurst {
-    0%   { transform: scale(0.3) translate(0,0); opacity: 0.9; }
-    40%  { transform: scale(1.4) translate(var(--dx), var(--dy)); opacity: 1; }
-    100% { transform: scale(0.1) translate(calc(var(--dx) * 2), calc(var(--dy) * 2)); opacity: 0; }
   }
 
   #message {
@@ -261,27 +196,17 @@
   <div id="p1" class="fighter" style="left:20%;">
     <div class="head"></div>
     <div class="body"></div>
-    <div class="combo-counter" id="p1-combo">COMBO ×3!</div>
   </div>
   <div id="p2" class="fighter" style="right:20%;">
     <div class="head"></div>
     <div class="body"></div>
-    <div class="combo-counter" id="p2-combo">COMBO ×3!</div>
   </div>
 
   <div id="message">FIGHT!</div>
 </div>
 
-<!-- Audio -->
-<audio id="cheer-start" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-start.mp3" type="audio/mpeg"></audio>
-<audio id="cheer-normal" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-medium.mp3" type="audio/mpeg"></audio>
-<audio id="cheer-big" preload="auto"><source src="https://assets.codepen.io/243235/crowd-cheer-big.mp3" type="audio/mpeg"></audio>
-<audio id="cheer-near-ko" preload="auto"><source src="https://assets.codepen.io/243235/crowd-excited-near-ko.mp3" type="audio/mpeg"></audio>
-<audio id="punch-impact" preload="auto"><source src="https://assets.codepen.io/243235/punch-impact-hard.mp3" type="audio/mpeg"></audio>
-<audio id="kick-impact" preload="auto"><source src="https://assets.codepen.io/243235/kick-impact-strong.mp3" type="audio/mpeg"></audio>
-
 <script>
-const socket = io('http://localhost:3000'); // ← CHANGE TO YOUR SERVER URL WHEN DEPLOYED
+const socket = io('http://localhost:3000'); // ← CHANGE THIS to your deployed server URL
 
 let myId = null;
 let opponentId = null;
@@ -293,38 +218,24 @@ const gameEl   = document.getElementById('game');
 const msgEl    = document.getElementById('message');
 const roomCodeEl = document.getElementById('roomCode');
 
-// Audio
-const cheerStart    = document.getElementById('cheer-start');
-const cheerNormal   = document.getElementById('cheer-normal');
-const cheerBig      = document.getElementById('cheer-big');
-const cheerNearKO   = document.getElementById('cheer-near-ko');
-const punchImpact   = document.getElementById('punch-impact');
-const kickImpact    = document.getElementById('kick-impact');
-
 const p1 = {
   el: document.getElementById('p1'),
   hpBar: document.getElementById('p1-hp'),
   staminaBar: document.getElementById('p1-stamina'),
-  comboEl: document.getElementById('p1-combo'),
   x: 200,
   facing: 1,
   hp: 100,
-  stamina: 100,
-  comboCount: 0,
-  lastHitTime: 0
+  stamina: 100
 };
 
 const p2 = {
   el: document.getElementById('p2'),
   hpBar: document.getElementById('p2-hp'),
   staminaBar: document.getElementById('p2-stamina'),
-  comboEl: document.getElementById('p2-combo'),
   x: 800,
   facing: -1,
   hp: 100,
-  stamina: 100,
-  comboCount: 0,
-  lastHitTime: 0
+  stamina: 100
 };
 
 let keys = {};
@@ -343,7 +254,9 @@ function joinRoom() {
 }
 
 function goBackToMenu() {
-  if (roomId) socket.emit('leaveRoom', roomId);
+  if (roomId) {
+    socket.emit('leaveRoom', roomId);
+  }
 
   menuEl.style.display = 'flex';
   lobbyEl.style.display = 'none';
@@ -358,6 +271,17 @@ function goBackToMenu() {
   p1.staminaBar.style.width = '100%';
   p2.hpBar.style.width = '100%';
   p2.staminaBar.style.width = '100%';
+}
+
+function startGameScreen() {
+  // Small delay so both clients are ready
+  setTimeout(() => {
+    lobbyEl.style.display = 'none';
+    gameEl.style.display = 'block';
+    msgEl.textContent = "FIGHT!";
+    msgEl.style.opacity = '1';
+    setTimeout(() => msgEl.style.opacity = '0', 2200);
+  }, 200);
 }
 
 socket.on('currentState', (players) => {
@@ -383,6 +307,7 @@ socket.on('currentState', (players) => {
     }
   });
 
+  // If we joined a room that already has 2 players → start immediately
   if (Object.keys(players).length === 2) {
     startGameScreen();
   }
@@ -400,23 +325,9 @@ socket.on('playerJoined', ({id, player}) => {
   p2.staminaBar.style.width = p2.stamina + '%';
   updatePosition(p2);
 
+  // Second player joined → start game for both
   startGameScreen();
 });
-
-socket.on('gameStart', startGameScreen);
-
-function startGameScreen() {
-  lobbyEl.style.display = 'none';
-  gameEl.style.display = 'block';
-  msgEl.textContent = "FIGHT!";
-  msgEl.style.opacity = '1';
-
-  cheerStart.currentTime = 0;
-  cheerStart.volume = 0.6;
-  cheerStart.play().catch(() => {});
-
-  setTimeout(() => msgEl.style.opacity = '0', 2200);
-}
 
 socket.on('playerUpdate', (data) => {
   if (data.id === socket.id) return;
@@ -426,114 +337,19 @@ socket.on('playerUpdate', (data) => {
   updatePosition(p2);
 });
 
-function showCombo(fighter, count) {
-  const comboEl = fighter.comboEl;
-  comboEl.textContent = `COMBO ×${count}!`;
-  comboEl.style.opacity = '1';
-  setTimeout(() => comboEl.style.opacity = '0', 1800);
-}
-
-function createImpactParticles(x, y, isKick = false, count = 12) {
-  for (let i = 0; i < count; i++) {
-    const particle = document.createElement('div');
-    particle.className = 'impact-particle' + (isKick ? ' kick' : '');
-    
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 30 + Math.random() * 60;
-    const dx = Math.cos(angle) * distance;
-    const dy = Math.sin(angle) * distance - 20;
-
-    particle.style.setProperty('--dx', dx + 'px');
-    particle.style.setProperty('--dy', dy + 'px');
-    
-    particle.style.left = (x + dx * 0.3) + 'px';
-    particle.style.bottom = (y + dy * 0.3 + 60) + 'px';
-
-    gameEl.appendChild(particle);
-    setTimeout(() => particle.remove(), 700);
-  }
-}
-
 socket.on('applyDamage', (data) => {
-  let targetEl, targetHpBar, targetHp, targetPlayer;
+  let targetHpBar, targetHp;
 
   if (data.targetId === socket.id) {
-    targetEl = p1.el;
     targetHpBar = p1.hpBar;
     targetHp = p1.hp = Math.max(0, p1.hp - data.damage);
-    targetPlayer = p1;
   } else if (data.targetId === opponentId) {
-    targetEl = p2.el;
     targetHpBar = p2.hpBar;
     targetHp = p2.hp = Math.max(0, p2.hp - data.damage);
-    targetPlayer = p2;
   }
 
-  if (targetEl && targetHpBar) {
+  if (targetHpBar) {
     targetHpBar.style.width = targetHp + '%';
-
-    // Hit feedback
-    targetEl.classList.add('hit');
-    setTimeout(() => targetEl.classList.remove('hit'), 400);
-
-    const hitX = (parseFloat(targetEl.style.left) || 0) + 32;
-    const hitY = 140;
-
-    // Combo logic (client-side approximation for animation)
-    const now = Date.now();
-    if (now - targetPlayer.lastHitTime < 1200) {
-      targetPlayer.comboCount++;
-      if (targetPlayer.comboCount >= 3) {
-        targetPlayer.comboCount = 0;
-        showCombo(targetPlayer, 3);
-        // Bigger combo effect
-        createImpactParticles(hitX, hitY, true, 24);
-        gameEl.classList.add('impact');
-        setTimeout(() => gameEl.classList.remove('impact'), 500);
-        cheerBig.currentTime = 0;
-        cheerBig.volume = 0.8;
-        cheerBig.play().catch(() => {});
-      } else {
-        showCombo(targetPlayer, targetPlayer.comboCount);
-      }
-    } else {
-      targetPlayer.comboCount = 1;
-      showCombo(targetPlayer, 1);
-    }
-    targetPlayer.lastHitTime = now;
-
-    createImpactParticles(hitX, hitY, data.attackType === 'kick', data.damage > 15 ? 18 : 10);
-
-    if (data.damage > 14) {
-      gameEl.classList.add('impact');
-      setTimeout(() => gameEl.classList.remove('impact'), 400);
-    }
-
-    // Sounds
-    if (data.attackType === 'punch') {
-      punchImpact.currentTime = 0;
-      punchImpact.volume = 0.7 + Math.random() * 0.2;
-      punchImpact.play().catch(() => {});
-    } else if (data.attackType === 'kick') {
-      kickImpact.currentTime = 0;
-      kickImpact.volume = 0.75 + Math.random() * 0.15;
-      kickImpact.play().catch(() => {});
-    }
-
-    // Crowd
-    if (targetHp <= 30) {
-      cheerNearKO.currentTime = 0;
-      cheerNearKO.volume = 0.7;
-      cheerNearKO.play().catch(() => {});
-    } else if (Math.random() < 0.65) {
-      cheerNormal.currentTime = 0;
-      cheerNormal.volume = 0.5 + Math.random() * 0.2;
-      cheerNormal.play().catch(() => {});
-    } else {
-      cheerBig.currentTime = 0;
-      cheerBig.volume = 0.55;
-      cheerBig.play().catch(() => {});
-    }
   }
 });
 
